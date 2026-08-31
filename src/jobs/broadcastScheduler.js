@@ -1,34 +1,38 @@
 
 import Broadcast from "../models/Broadcast.js";
-import { broadcastMessage } from "../services/broadcast.service.js";
-import { isWhatsAppReady } from "../services/whatsapp.manager.js";
+
+import {
+  broadcastMessage,
+} from "../services/broadcast.service.js";
+
+import {
+  isWhatsAppReady,
+} from "../services/whatsapp.manager.js";
+
 import { logger } from "../utils/logger.js";
 
-
-let schedulerRunning = false;
+let running = false;
 
 const INTERVAL_MS =
-  Number(
-    process.env.BROADCAST_INTERVAL_MS ||
-      30_000
+  Math.max(
+    5_000,
+    Number(
+      process.env.BROADCAST_INTERVAL_MS ||
+        30_000
+    )
   );
 
-
 async function processScheduledBroadcasts() {
-  if (schedulerRunning) {
-    logger.debug(
-      "[BROADCAST] Previous scheduler cycle still running"
-    );
-
+  if (running) {
     return;
   }
 
-  schedulerRunning = true;
+  running = true;
 
   try {
     const now = new Date();
 
-    const dueBroadcasts =
+    const broadcasts =
       await Broadcast.find({
         isScheduled: true,
         status: "pending",
@@ -39,94 +43,67 @@ async function processScheduledBroadcasts() {
         scheduledFor: 1,
       });
 
-
-    if (!dueBroadcasts.length) {
-      return;
-    }
-
-
-    logger.info(
-      `[BROADCAST] Found ${dueBroadcasts.length} due broadcast(s)`
-    );
-
-
-    for (
-      const broadcast of dueBroadcasts
-    ) {
+    for (const broadcast of broadcasts) {
       const userId =
         String(broadcast.userId);
 
-
       /*
-       * Do not consume a scheduled broadcast when
-       * WhatsApp isn't actually ready.
+       * WhatsApp isn't ready.
        *
-       * It remains pending for the next cycle.
+       * DO NOTHING.
+       *
+       * The broadcast stays pending.
        */
       if (
         !isWhatsAppReady(userId)
       ) {
-        logger.warn(
-          `[BROADCAST:${broadcast._id}] WhatsApp not ready for user ${userId}; keeping broadcast pending`
+        logger.debug(
+          `[BROADCAST:${broadcast._id}] Waiting for WhatsApp user ${userId}`
         );
 
         continue;
       }
 
-
       try {
         await broadcastMessage(
           broadcast._id
         );
-
-        logger.info(
-          `[BROADCAST:${broadcast._id}] Scheduled broadcast processed`
-        );
       } catch (error) {
-        logger.error(
-          `[BROADCAST:${broadcast._id}] Processing failed: ${error.message}`
-        );
-
         /*
-         * Do NOT mark the broadcast as completed.
-         *
-         * If WhatsApp temporarily reconnects, the next
-         * scheduler cycle can retry it.
+         * Never consume the broadcast because of
+         * a temporary WhatsApp problem.
          */
+        logger.error(
+          `[BROADCAST:${broadcast._id}] Attempt failed: ${error.message}`
+        );
       }
     }
   } catch (error) {
     logger.error(
-      `[BROADCAST] Scheduler cycle failed: ${error.message}`
+      `[BROADCAST] Scheduler failed: ${error.message}`
     );
   } finally {
-    schedulerRunning = false;
+    running = false;
   }
 }
 
-
 export function startBroadcastScheduler() {
   logger.info(
-    `[BROADCAST] Scheduler started (${INTERVAL_MS}ms interval)`
+    `[BROADCAST] Scheduler started (${INTERVAL_MS}ms)`
   );
 
   /*
-   * Run immediately instead of waiting one full interval.
+   * Run immediately.
    */
   processScheduledBroadcasts();
 
+  const timer =
+    setInterval(
+      processScheduledBroadcasts,
+      INTERVAL_MS
+    );
 
-  const timer = setInterval(
-    processScheduledBroadcasts,
-    INTERVAL_MS
-  );
-
-
-  /*
-   * Don't prevent Node from shutting down cleanly.
-   */
   timer.unref?.();
-
 
   return () => {
     clearInterval(timer);

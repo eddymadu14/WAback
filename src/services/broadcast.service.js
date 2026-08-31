@@ -1,11 +1,15 @@
 
 import Broadcast from "../models/Broadcast.js";
+
 import {
   isWhatsAppReady,
 } from "./whatsapp.manager.js";
-import { sendMessage } from "./whatsapp.send.js";
-import { logger } from "../utils/logger.js";
 
+import {
+  sendMessage,
+} from "./whatsapp.send.js";
+
+import { logger } from "../utils/logger.js";
 
 export async function broadcastMessage(
   broadcastId
@@ -24,33 +28,49 @@ export async function broadcastMessage(
   const userId =
     String(broadcast.userId);
 
-
   /*
-   * Runtime WhatsApp state is the authority.
+   * Runtime WhatsApp state is the
+   * only authority.
    */
-  if (!isWhatsAppReady(userId)) {
+  if (
+    !isWhatsAppReady(userId)
+  ) {
     throw new Error(
       `WhatsApp is not ready for user ${userId}`
     );
   }
 
-
   let sentCount = 0;
   let failedCount = 0;
 
-
   for (
-    const contactObj of broadcast.contacts
+    const contactObj of
+    broadcast.contacts
   ) {
     /*
-     * Never resend a contact that was already
-     * successfully delivered.
+     * Already delivered.
      */
     if (
       contactObj.status === "sent"
     ) {
       sentCount++;
       continue;
+    }
+
+    /*
+     * Check before every recipient.
+     *
+     * If WhatsApp disconnects halfway through
+     * the broadcast, stop immediately.
+     */
+    if (
+      !isWhatsAppReady(userId)
+    ) {
+      logger.warn(
+        `[Broadcast:${broadcast._id}] WhatsApp disconnected. Pausing broadcast.`
+      );
+
+      break;
     }
 
     try {
@@ -60,88 +80,114 @@ export async function broadcastMessage(
         broadcast.message
       );
 
-      contactObj.status = "sent";
-      contactObj.sentAt = new Date();
+      contactObj.status =
+        "sent";
+
+      contactObj.sentAt =
+        new Date();
 
       sentCount++;
 
       /*
-       * Persist progress after every successful
-       * recipient.
+       * Persist immediately.
+       *
+       * If Node crashes at recipient #50,
+       * recipients #1-49 remain sent and
+       * the next run starts from #50.
        */
       await broadcast.save();
-    } catch (error) {
-      contactObj.status = "failed";
 
+    } catch (error) {
+
+      
+contactObj.attempts =
+  (contactObj.attempts || 0) + 1;
+
+contactObj.lastError =
+  error.message;
+
+contactObj.lastAttemptAt =
+  new Date();
+
+contactObj.status = "pending";
       failedCount++;
+
+  
+
+      await broadcast.save();
 
       logger.error(
         `[Broadcast:${broadcast._id}] Failed for ${contactObj.contact}: ${error.message}`
       );
 
       /*
-       * Save the failure but continue with the
-       * remaining recipients.
+       * If WhatsApp itself went down, stop
+       * processing this broadcast immediately.
        */
-      await broadcast.save();
+      if (
+        !isWhatsAppReady(userId)
+      ) {
+        break;
+      }
     }
   }
 
-
-  const hasPending =
+  const pending =
     broadcast.contacts.some(
       (contact) =>
-        contact.status === "pending"
+        contact.status ===
+        "pending"
     );
 
+  const allSent =
+    broadcast.contacts.length > 0 &&
+    broadcast.contacts.every(
+      (contact) =>
+        contact.status === "sent"
+    );
 
-  /*
-   * If everything was sent successfully.
-   */
-  if (
-    !hasPending &&
-    failedCount === 0
-  ) {
-    broadcast.status = "sent";
-    broadcast.isScheduled = false;
-    broadcast.sentAt = new Date();
+  if (allSent) {
+    broadcast.status =
+      "sent";
+
+    broadcast.isScheduled =
+      false;
+
+    broadcast.sentAt =
+      new Date();
+  } else if (pending) {
+    /*
+     * Keep it alive.
+     */
+    broadcast.status =
+      "pending";
+
+    broadcast.isScheduled =
+      true;
   }
-
-  /*
-   * Some contacts failed.
-   */
-  else if (
-    !hasPending &&
-    failedCount > 0
-  ) {
-    broadcast.status = "failed";
-    broadcast.isScheduled = false;
-    broadcast.sentAt = new Date();
-  }
-
-  /*
-   * There are still pending recipients.
-   *
-   * Keep the broadcast schedulable.
-   */
-  else {
-    broadcast.status = "pending";
-  }
-
 
   await broadcast.save();
 
-
   logger.info(
-    `[Broadcast:${broadcast._id}] Completed: sent=${sentCount}, failed=${failedCount}, status=${broadcast.status}`
+    `[Broadcast:${broadcast._id}] Result: sent=${sentCount}, failed=${failedCount}, pending=${broadcast.contacts.filter(
+      (c) => c.status === "pending"
+    ).length}, status=${broadcast.status}`
   );
-
 
   return {
     broadcastId:
       broadcast._id,
+
     sentCount,
+
     failedCount,
+
+    pendingCount:
+      broadcast.contacts.filter(
+        (c) =>
+          c.status === "pending"
+      ).length,
+
     status:
       broadcast.status,
   };

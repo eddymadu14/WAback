@@ -1,14 +1,22 @@
+
 import fs from "fs/promises";
 import path from "path";
-import { createClient } from "@supabase/supabase-js";
+import {
+  createClient,
+} from "@supabase/supabase-js";
+
 import { logger } from "../utils/logger.js";
 
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const IS_PRODUCTION =
+  process.env.NODE_ENV === "production";
 
 const DATA_PATH =
-  process.env.WHATSAPP_AUTH_PATH || "./wwebjs_auth";
+  process.env.WHATSAPP_AUTH_PATH ||
+  "./wwebjs_auth";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_URL =
+  process.env.SUPABASE_URL;
+
 const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -16,33 +24,16 @@ const BUCKET =
   process.env.SUPABASE_WHATSAPP_BUCKET ||
   "whatsapp-sessions";
 
-/*
- * Supabase is ONLY required in production.
- *
- * Development:
- *   RemoteAuth/local filesystem
- *   ./wwebjs_auth
- *
- * Production:
- *   Supabase Storage
- */
 if (
   IS_PRODUCTION &&
-  (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
+  (!SUPABASE_URL ||
+    !SUPABASE_SERVICE_ROLE_KEY)
 ) {
   throw new Error(
     "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production"
   );
 }
 
-/*
- * This client MUST stay server-side.
- *
- * Never expose SUPABASE_SERVICE_ROLE_KEY
- * to the frontend.
- *
- * It is deliberately null in development.
- */
 const supabase = IS_PRODUCTION
   ? createClient(
       SUPABASE_URL,
@@ -56,19 +47,10 @@ const supabase = IS_PRODUCTION
     )
   : null;
 
-/*
- * RemoteAuth session ZIP location in Supabase.
- *
- * Example:
- *   session-123/session-123.zip
- */
 function objectPath(session) {
   return `${session}/${session}.zip`;
 }
 
-/*
- * Local ZIP location used by RemoteAuth.
- */
 function localZipPath(session) {
   return path.resolve(
     DATA_PATH,
@@ -77,22 +59,15 @@ function localZipPath(session) {
 }
 
 export const supabaseWhatsAppStore = {
-  /**
-   * Check whether a WhatsApp session exists.
-   *
-   * Production:
-   *   Check Supabase Storage.
-   *
-   * Development:
-   *   Check the local filesystem.
+  /*
+   * RemoteAuth required method.
    */
   async sessionExists({ session }) {
-    /*
-     * DEVELOPMENT
-     */
     if (!IS_PRODUCTION) {
       try {
-        await fs.access(localZipPath(session));
+        await fs.access(
+          localZipPath(session)
+        );
 
         return true;
       } catch {
@@ -100,76 +75,100 @@ export const supabaseWhatsAppStore = {
       }
     }
 
-    /*
-     * PRODUCTION
-     */
-    const folder = session;
-
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .list(folder, {
-        search: `${session}.zip`,
-        limit: 10,
-      });
+    const { data, error } =
+      await supabase.storage
+        .from(BUCKET)
+        .list(session, {
+          search: `${session}.zip`,
+          limit: 10,
+        });
 
     if (error) {
-      logger.error(
-        `[SUPABASE WA] sessionExists failed for ${session}: ${error.message}`
-      );
-
       throw error;
     }
 
     return Boolean(
       data?.some(
-        (file) => file.name === `${session}.zip`
+        (file) =>
+          file.name ===
+          `${session}.zip`
       )
     );
   },
 
-  /**
-   * Save the ZIP created internally by RemoteAuth.
-   *
-   * Development:
-   *   Nothing needs to be uploaded.
-   *
-   * Production:
-   *   Upload ZIP to Supabase Storage.
+  /*
+   * Discover ALL persisted production sessions.
    */
-  async save({ session }) {
-    const localPath = localZipPath(session);
-
-    /*
-     * DEVELOPMENT
-     *
-     * RemoteAuth already has the session locally.
-     */
+  async listSessions() {
     if (!IS_PRODUCTION) {
-      logger.info(
-        `[LOCAL WA] Session saved locally: ${session}`
-      );
-
-      return;
+      return [];
     }
 
-    /*
-     * PRODUCTION
-     */
-    const remotePath = objectPath(session);
-
-    const file = await fs.readFile(localPath);
-
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(remotePath, file, {
-        contentType: "application/zip",
-        upsert: true,
-        cacheControl: "0",
-      });
+    const { data, error } =
+      await supabase.storage
+        .from(BUCKET)
+        .list("", {
+          limit: 1000,
+        });
 
     if (error) {
       logger.error(
-        `[SUPABASE WA] Failed to save session ${session}: ${error.message}`
+        `[SUPABASE WA] Failed to list sessions: ${error.message}`
+      );
+
+      throw error;
+    }
+
+    return (data || [])
+      .filter(
+        (item) =>
+          item.name?.startsWith(
+            "session-"
+          )
+      )
+      .map((item) =>
+        item.name.replace(
+          /^session-/,
+          ""
+        )
+      )
+      .filter(Boolean);
+  },
+
+  /*
+   * Save RemoteAuth ZIP.
+   */
+  async save({ session }) {
+    if (!IS_PRODUCTION) {
+      return;
+    }
+
+    const localPath =
+      localZipPath(session);
+
+    const remotePath =
+      objectPath(session);
+
+    const file =
+      await fs.readFile(localPath);
+
+    const { error } =
+      await supabase.storage
+        .from(BUCKET)
+        .upload(
+          remotePath,
+          file,
+          {
+            contentType:
+              "application/zip",
+            upsert: true,
+            cacheControl: "0",
+          }
+        );
+
+    if (error) {
+      logger.error(
+        `[SUPABASE WA] Save failed for ${session}: ${error.message}`
       );
 
       throw error;
@@ -180,47 +179,28 @@ export const supabaseWhatsAppStore = {
     );
   },
 
-  /**
-   * Restore a session ZIP.
-   *
-   * RemoteAuth gives us the destination path
-   * where the ZIP must be written.
-   *
-   * Development:
-   *   Session already exists locally.
-   *
-   * Production:
-   *   Download from Supabase Storage.
+  /*
+   * Restore RemoteAuth ZIP.
    */
   async extract({
     session,
     path: destinationPath,
   }) {
-    /*
-     * DEVELOPMENT
-     *
-     * Nothing to download.
-     */
     if (!IS_PRODUCTION) {
-      logger.info(
-        `[LOCAL WA] Session already available locally: ${session}`
-      );
-
       return;
     }
 
-    /*
-     * PRODUCTION
-     */
-    const remotePath = objectPath(session);
+    const remotePath =
+      objectPath(session);
 
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .download(remotePath);
+    const { data, error } =
+      await supabase.storage
+        .from(BUCKET)
+        .download(remotePath);
 
     if (error) {
       logger.error(
-        `[SUPABASE WA] Failed to download session ${session}: ${error.message}`
+        `[SUPABASE WA] Download failed for ${session}: ${error.message}`
       );
 
       throw error;
@@ -228,14 +208,19 @@ export const supabaseWhatsAppStore = {
 
     if (!data) {
       throw new Error(
-        `No session data returned from Supabase for ${session}`
+        `No session data found for ${session}`
       );
     }
 
-    const arrayBuffer = await data.arrayBuffer();
+    const buffer =
+      Buffer.from(
+        await data.arrayBuffer()
+      );
 
     await fs.mkdir(
-      path.dirname(destinationPath),
+      path.dirname(
+        destinationPath
+      ),
       {
         recursive: true,
       }
@@ -243,68 +228,42 @@ export const supabaseWhatsAppStore = {
 
     await fs.writeFile(
       destinationPath,
-      Buffer.from(arrayBuffer)
+      buffer
     );
 
     logger.info(
-      `[SUPABASE WA] Session restored locally: ${session}`
+      `[SUPABASE WA] Session restored: ${session}`
     );
   },
 
-  /**
-   * Delete a WhatsApp session.
-   *
-   * This should only happen after an explicit logout.
-   *
-   * Development:
-   *   Delete the local session ZIP.
-   *
-   * Production:
-   *   Delete the Supabase object.
+  /*
+   * Delete ONLY on explicit logout.
    */
   async delete({ session }) {
-    /*
-     * DEVELOPMENT
-     */
     if (!IS_PRODUCTION) {
-      try {
-        await fs.rm(localZipPath(session), {
-          force: true,
-        });
-
-        logger.info(
-          `[LOCAL WA] Session deleted: ${session}`
-        );
-      } catch (error) {
-        logger.error(
-          `[LOCAL WA] Failed to delete session ${session}: ${error.message}`
-        );
-
-        throw error;
-      }
-
       return;
     }
 
-    /*
-     * PRODUCTION
-     */
-    const remotePath = objectPath(session);
+    const remotePath =
+      objectPath(session);
 
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .remove([remotePath]);
+    const { error } =
+      await supabase.storage
+        .from(BUCKET)
+        .remove([
+          remotePath,
+        ]);
 
     if (error) {
       logger.error(
-        `[SUPABASE WA] Failed to delete session ${session}: ${error.message}`
+        `[SUPABASE WA] Delete failed for ${session}: ${error.message}`
       );
 
       throw error;
     }
 
     logger.info(
-      `[SUPABASE WA] Remote session deleted: ${session}`
+      `[SUPABASE WA] Session deleted: ${session}`
     );
   },
 };

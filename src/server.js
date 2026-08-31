@@ -1,19 +1,23 @@
 
 import dotenv from "dotenv";
+
 dotenv.config();
 
 import cors from "cors";
 
 import app from "./app.js";
+
 import connectDB from "./config/db.js";
+
 import {
   initAllWhatsAppUsers,
 } from "./services/whatsapp.manager.js";
+
 import {
   startBroadcastScheduler,
 } from "./jobs/broadcastScheduler.js";
-import { logger } from "./utils/logger.js";
 
+import { logger } from "./utils/logger.js";
 
 process.on(
   "uncaughtException",
@@ -22,12 +26,13 @@ process.on(
       `Uncaught Exception: ${error.message}`
     );
 
-    console.error(error.stack);
+    console.error(
+      error.stack
+    );
 
     process.exit(1);
   }
 );
-
 
 process.on(
   "unhandledRejection",
@@ -37,7 +42,6 @@ process.on(
     );
   }
 );
-
 
 async function startServer() {
   try {
@@ -50,12 +54,10 @@ async function startServer() {
       "MongoDB connected successfully"
     );
 
-
     /*
      * 2. Middleware
      */
     app.use(cors());
-
 
     /*
      * 3. HTTP server
@@ -76,42 +78,57 @@ async function startServer() {
       }
     );
 
-
     /*
-     * 4. Restore WhatsApp sessions.
+     * 4. Restore persisted WhatsApp
+     * authentication.
      *
-     * Local:
-     *   LocalAuth restores from disk.
+     * IMPORTANT:
      *
-     * Production:
-     *   RemoteAuth downloads from Supabase.
+     * This reads:
+     *
+     * Development -> LocalAuth
+     * Production  -> Supabase
+     *
+     * NOT MongoDB.
      */
-    await initAllWhatsAppUsers();
+    try {
+      await initAllWhatsAppUsers();
 
-    logger.info(
-      "WhatsApp session restoration completed"
-    );
-
+      logger.info(
+        "WhatsApp restoration initiated"
+      );
+    } catch (error) {
+      /*
+       * WhatsApp restoration failure should
+       * NOT kill the HTTP API.
+       */
+      logger.error(
+        `WhatsApp restoration failed: ${error.message}`
+      );
+    }
 
     /*
-     * 5. Start scheduler AFTER restoration
-     * has been initiated.
+     * 5. Start scheduler.
+     *
+     * It waits for runtime WhatsApp readiness.
      */
     startBroadcastScheduler();
 
     logger.info(
       "Broadcast scheduler started"
     );
+
   } catch (error) {
     logger.error(
       `Server startup failed: ${error.message}`
     );
 
-    console.error(error);
+    console.error(
+      error
+    );
 
     process.exit(1);
   }
 }
-
 
 startServer();

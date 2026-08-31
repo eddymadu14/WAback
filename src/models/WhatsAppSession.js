@@ -12,27 +12,15 @@ const WhatsAppSessionSchema =
       },
 
       /*
-       * Runtime state.
+       * Runtime/UI state only.
+       *
+       * NOT authentication persistence.
        */
       connected: {
         type: Boolean,
         default: false,
       },
 
-      /*
-       * Whether the user has successfully linked
-       * WhatsApp before.
-       *
-       * This is NOT the actual authentication data.
-       *
-       * Actual authentication is stored by:
-       *
-       * Development:
-       *   LocalAuth filesystem
-       *
-       * Production:
-       *   Supabase Storage
-       */
       hasSession: {
         type: Boolean,
         default: false,

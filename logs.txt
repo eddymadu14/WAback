@@ -4171,3 +4171,17 @@
 [INFO] [2026-08-31T14:50:25.570Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
 [ERROR] [2026-08-31T14:50:40.934Z] Broadcast error:
 [ERROR] [2026-08-31T14:52:00.771Z] Broadcast error:
+[INFO] [2026-08-31T15:17:54.946Z] Message queue initialized
+[INFO] [2026-08-31T15:17:56.329Z] MongoDB connected successfully
+[INFO] [2026-08-31T15:17:56.339Z] Backend running on port 5000
+[INFO] [2026-08-31T15:17:56.383Z] [WA] Found 1 persisted WhatsApp session(s)
+[INFO] [2026-08-31T15:17:56.385Z] [WA:695932168a9879344ba3c854] Authentication: LocalAuth
+[INFO] [2026-08-31T15:17:56.391Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp
+[INFO] [2026-08-31T15:18:20.090Z] [WA:695932168a9879344ba3c854] Initialization completed
+[INFO] [2026-08-31T15:18:20.094Z] [BROADCAST] Scheduler started (30000ms)
+[INFO] [2026-08-31T15:18:20.096Z] Broadcast scheduler started
+[INFO] [2026-08-31T15:18:20.091Z] [WA:695932168a9879344ba3c854] Restoration initiated
+[INFO] [2026-08-31T15:18:20.092Z] WhatsApp restoration initiated
+[INFO] [2026-08-31T15:18:24.420Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[ERROR] [2026-08-31T15:18:45.150Z] Broadcast error:
+[ERROR] [2026-08-31T15:19:25.646Z] Broadcast error:

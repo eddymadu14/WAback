@@ -14,41 +14,57 @@ const {
   RemoteAuth,
 } = pkg;
 
-const clients = new Map();
-const initializingClients = new Map();
-const readyClients = new Set();
-
 const IS_PRODUCTION =
   process.env.NODE_ENV === "production";
 
 const AUTH_PATH =
   process.env.WHATSAPP_AUTH_PATH || "./wwebjs_auth";
 
-const BACKUP_INTERVAL =
-  Math.max(
-    60_000,
-    Number(
-      process.env.WHATSAPP_BACKUP_INTERVAL_MS ||
-        60_000
-    )
-  );
-
+const BACKUP_INTERVAL_MS = Math.max(
+  60_000,
+  Number(
+    process.env.WHATSAPP_BACKUP_INTERVAL_MS ||
+      300_000
+  )
+);
 
 /*
- * ---------------------------------------------------------
- * Persistent RemoteAuth
- * ---------------------------------------------------------
- *
- * whatsapp-web.js RemoteAuth normally deletes the remote
- * session during disconnect().
- *
- * We do NOT want that.
- *
- * A network disconnect must not destroy our production
- * recovery copy.
- *
- * Only explicit logout() deletes the Supabase session.
- */
+|--------------------------------------------------------------------------
+| Runtime state
+|--------------------------------------------------------------------------
+|
+| These Maps/Sets are deliberately NOT persisted.
+|
+| Authentication persistence:
+|
+| Development -> LocalAuth filesystem
+| Production  -> RemoteAuth + Supabase
+|
+| Runtime readiness:
+|
+| readyClients
+|
+| MongoDB is NOT used to restore WhatsApp authentication.
+|
+*/
+
+const clients = new Map();
+const initializingClients = new Map();
+const readyClients = new Set();
+
+/*
+|--------------------------------------------------------------------------
+| Persistent RemoteAuth
+|--------------------------------------------------------------------------
+|
+| RemoteAuth's normal disconnect behavior can remove the
+| remote session. We do NOT want a temporary WhatsApp/network
+| disconnect to destroy the production authentication backup.
+|
+| Only explicit logout removes the persisted session.
+|
+*/
+
 class PersistentRemoteAuth extends RemoteAuth {
   async disconnect() {
     clearInterval(this.backupSync);
@@ -58,7 +74,7 @@ class PersistentRemoteAuth extends RemoteAuth {
         await fs.rm(this.userDataDir, {
           recursive: true,
           force: true,
-          maxRetries: this.rmMaxRetries || 4,
+          maxRetries: 4,
         });
       } catch (error) {
         logger.warn(
@@ -84,7 +100,7 @@ class PersistentRemoteAuth extends RemoteAuth {
         await fs.rm(this.userDataDir, {
           recursive: true,
           force: true,
-          maxRetries: this.rmMaxRetries || 4,
+          maxRetries: 4,
         });
       } catch (error) {
         logger.warn(
@@ -95,138 +111,115 @@ class PersistentRemoteAuth extends RemoteAuth {
   }
 }
 
-
 /*
- * ---------------------------------------------------------
- * Public state helpers
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Runtime helpers
+|--------------------------------------------------------------------------
+*/
+
+export function isWhatsAppReady(userId) {
+  const key = String(userId);
+
+  const client = clients.get(key);
+
+  return Boolean(
+    client &&
+      readyClients.has(key)
+  );
+}
 
 export function getClient(userId) {
   const key = String(userId);
 
-  if (!clients.has(key)) {
-    return null;
-  }
-
-  if (!readyClients.has(key)) {
+  if (!isWhatsAppReady(key)) {
     return null;
   }
 
   return clients.get(key);
 }
 
-
-export function isWhatsAppReady(userId) {
-  const key = String(userId);
-
-  return (
-    clients.has(key) &&
-    readyClients.has(key)
-  );
-}
-
-
 export function getWhatsAppState(userId) {
   const key = String(userId);
+
   const client = clients.get(key);
 
   return {
-    exists: Boolean(client),
+    initialized: Boolean(client),
     ready: readyClients.has(key),
   };
 }
 
-
 /*
- * ---------------------------------------------------------
- * Client initialization
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| MongoDB status cache
+|--------------------------------------------------------------------------
+|
+| MongoDB can store UI/application status.
+|
+| It is NEVER used to restore authentication.
+|
+*/
 
-export async function initWhatsAppUser(userId) {
-  const key = String(userId);
-
-  if (clients.has(key)) {
-    const client = clients.get(key);
-
-    logger.info(
-      `[WA:${userId}] Client already exists`
-    );
-
-    return client;
-  }
-
-  if (initializingClients.has(key)) {
-    logger.info(
-      `[WA:${userId}] Initialization already in progress`
-    );
-
-    return initializingClients.get(key);
-  }
-
-  const promise =
-    initializeClient(userId);
-
-  initializingClients.set(
-    key,
-    promise
-  );
-
+async function updateSessionStatus(userId, updates) {
   try {
-    return await promise;
-  } finally {
-    initializingClients.delete(key);
+    await WhatsAppSession.updateOne(
+      { userId },
+      {
+        $set: updates,
+      },
+      {
+        upsert: true,
+      }
+    );
+  } catch (error) {
+    logger.error(
+      `[WA:${userId}] Failed to update status: ${error.message}`
+    );
   }
 }
 
-
 /*
- * ---------------------------------------------------------
- * Create auth strategy
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Authentication strategy
+|--------------------------------------------------------------------------
+*/
 
 function createAuthStrategy(userId) {
-  const key = String(userId);
+  const clientId = String(userId);
 
   if (!IS_PRODUCTION) {
     logger.info(
-      `[WA:${userId}] Using LocalAuth`
+      `[WA:${userId}] Authentication: LocalAuth`
     );
 
     return new LocalAuth({
-      clientId: key,
+      clientId,
       dataPath: AUTH_PATH,
       rmMaxRetries: 4,
     });
   }
 
   logger.info(
-    `[WA:${userId}] Using Supabase RemoteAuth`
+    `[WA:${userId}] Authentication: Supabase RemoteAuth`
   );
 
   return new PersistentRemoteAuth({
-    clientId: key,
+    clientId,
     dataPath: AUTH_PATH,
-
     store: supabaseWhatsAppStore,
-
     backupSyncIntervalMs:
-      BACKUP_INTERVAL,
-
+      BACKUP_INTERVAL_MS,
     rmMaxRetries: 4,
   });
 }
 
-
 /*
- * ---------------------------------------------------------
- * Create client
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Client creation
+|--------------------------------------------------------------------------
+*/
 
-function createClient(userId) {
+function createWhatsAppClient(userId) {
   return new Client({
     authStrategy:
       createAuthStrategy(userId),
@@ -254,7 +247,6 @@ function createClient(userId) {
       ],
 
       defaultViewport: null,
-
       timeout: 60_000,
     },
 
@@ -265,57 +257,58 @@ function createClient(userId) {
   });
 }
 
-
 /*
- * ---------------------------------------------------------
- * Mongo state helpers
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Initialize one user
+|--------------------------------------------------------------------------
+*/
 
-async function updateSession(userId, updates) {
+export async function initWhatsAppUser(userId) {
+  const key = String(userId);
+
+  if (clients.has(key)) {
+    return clients.get(key);
+  }
+
+  if (initializingClients.has(key)) {
+    return initializingClients.get(key);
+  }
+
+  const promise =
+    initializeWhatsAppClient(userId);
+
+  initializingClients.set(
+    key,
+    promise
+  );
+
   try {
-    await WhatsAppSession.updateOne(
-      { userId },
-      {
-        $set: updates,
-      },
-      {
-        upsert: true,
-      }
-    );
-  } catch (error) {
-    logger.error(
-      `[WA:${userId}] Failed to update Mongo state: ${error.message}`
-    );
+    return await promise;
+  } finally {
+    initializingClients.delete(key);
   }
 }
 
-
 /*
- * ---------------------------------------------------------
- * Initialize one client
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Actual initialization
+|--------------------------------------------------------------------------
+*/
 
-async function initializeClient(userId) {
+async function initializeWhatsAppClient(userId) {
   const key = String(userId);
 
   const client =
-    createClient(userId);
+    createWhatsAppClient(userId);
 
   /*
-   * Register immediately so concurrent calls cannot
-   * create another client.
+   * Register immediately.
    */
   clients.set(key, client);
 
-
   /*
-   * -------------------------------------------------------
    * QR
-   * -------------------------------------------------------
    */
-
   client.on("qr", async (qr) => {
     readyClients.delete(key);
 
@@ -323,88 +316,89 @@ async function initializeClient(userId) {
       `[WA:${userId}] QR generated`
     );
 
-    await updateSession(userId, {
-      connected: false,
-      requiresQR: true,
-      hasSession: false,
-      state: "QR",
-      qr,
-    });
-  });
-
-
-  /*
-   * -------------------------------------------------------
-   * Authentication
-   * -------------------------------------------------------
-   */
-
-  client.on("authenticated", async () => {
-    logger.info(
-      `[WA:${userId}] WhatsApp authenticated`
+    await updateSessionStatus(
+      userId,
+      {
+        connected: false,
+        requiresQR: true,
+        hasSession: false,
+        state: "QR",
+        qr,
+      }
     );
-
-    await updateSession(userId, {
-      connected: false,
-      requiresQR: false,
-      hasSession: true,
-      state: "AUTHENTICATED",
-      qr: null,
-      lastAuthenticatedAt: new Date(),
-    });
   });
 
+  /*
+   * Authentication successful.
+   */
+  client.on(
+    "authenticated",
+    async () => {
+      logger.info(
+        `[WA:${userId}] WhatsApp authenticated`
+      );
+
+      await updateSessionStatus(
+        userId,
+        {
+          connected: false,
+          requiresQR: false,
+          hasSession: true,
+          state: "AUTHENTICATED",
+          qr: null,
+          lastAuthenticatedAt:
+            new Date(),
+        }
+      );
+    }
+  );
 
   /*
-   * -------------------------------------------------------
-   * Ready
-   * -------------------------------------------------------
+   * THIS is the authoritative runtime
+   * connection event.
    */
-
   client.on("ready", async () => {
     readyClients.add(key);
 
     logger.info(
-      `[WA:${userId}] WhatsApp ready`
+      `[WA:${userId}] WhatsApp READY`
     );
 
-    await updateSession(userId, {
-      connected: true,
-      requiresQR: false,
-      hasSession: true,
-      state: "READY",
-      qr: null,
-      lastReadyAt: new Date(),
-    });
+    await updateSessionStatus(
+      userId,
+      {
+        connected: true,
+        requiresQR: false,
+        hasSession: true,
+        state: "READY",
+        qr: null,
+        lastReadyAt: new Date(),
+      }
+    );
   });
 
-
   /*
-   * -------------------------------------------------------
-   * State changes
-   * -------------------------------------------------------
+   * WhatsApp state changes.
    */
-
   client.on(
     "change_state",
     async (state) => {
       logger.info(
-        `[WA:${userId}] State changed: ${state}`
+        `[WA:${userId}] State: ${state}`
       );
 
-      await updateSession(userId, {
-        state,
-      });
+      await updateSessionStatus(
+        userId,
+        {
+          state: String(state),
+        }
+      );
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Loading
-   * -------------------------------------------------------
+   * Loading.
    */
-
   client.on(
     "loading_screen",
     (percent, message) => {
@@ -414,13 +408,9 @@ async function initializeClient(userId) {
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Authentication failure
-   * -------------------------------------------------------
+   * Authentication failure.
    */
-
   client.on(
     "auth_failure",
     async (message) => {
@@ -430,62 +420,63 @@ async function initializeClient(userId) {
         `[WA:${userId}] Authentication failure: ${message}`
       );
 
-      await updateSession(userId, {
-        connected: false,
-        requiresQR: true,
-        state: "AUTH_FAILURE",
-        qr: null,
-      });
+      await updateSessionStatus(
+        userId,
+        {
+          connected: false,
+          requiresQR: true,
+          state: "AUTH_FAILURE",
+          qr: null,
+        }
+      );
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Runtime error
-   * -------------------------------------------------------
+   * Client error.
    */
-
   client.on("error", async (error) => {
     logger.error(
-      `[WA:${userId}] Client error: ${error?.message || error}`
+      `[WA:${userId}] Client error: ${
+        error?.message || error
+      }`
     );
 
-    await updateSession(userId, {
-      state: "ERROR",
-      lastError:
-        error?.message || String(error),
-    });
+    await updateSessionStatus(
+      userId,
+      {
+        state: "ERROR",
+        lastError:
+          error?.message ||
+          String(error),
+      }
+    );
   });
 
-
   /*
-   * -------------------------------------------------------
-   * Remote session saved
-   * -------------------------------------------------------
+   * Production RemoteAuth backup.
    */
-
   client.on(
     "remote_session_saved",
     async () => {
       logger.info(
-        `[WA:${userId}] Remote WhatsApp session saved`
+        `[WA:${userId}] Remote session saved`
       );
 
-      await updateSession(userId, {
-        hasSession: true,
-        lastSessionBackupAt: new Date(),
-      });
+      await updateSessionStatus(
+        userId,
+        {
+          hasSession: true,
+          lastSessionBackupAt:
+            new Date(),
+        }
+      );
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Disconnect
-   * -------------------------------------------------------
+   * Disconnect.
    */
-
   client.on(
     "disconnected",
     async (reason) => {
@@ -494,34 +485,37 @@ async function initializeClient(userId) {
       clients.delete(key);
 
       const normalizedReason =
-        String(reason || "").toUpperCase();
+        String(reason || "")
+          .toUpperCase();
 
-      const wasLogout =
+      const loggedOut =
         normalizedReason === "LOGOUT";
 
       logger.warn(
         `[WA:${userId}] Disconnected: ${reason}`
       );
 
-      await updateSession(userId, {
-        connected: false,
-        requiresQR: wasLogout,
-        state: wasLogout
-          ? "LOGGED_OUT"
-          : "DISCONNECTED",
-        qr: null,
-        hasSession: !wasLogout,
-      });
+      await updateSessionStatus(
+        userId,
+        {
+          connected: false,
+          requiresQR: loggedOut,
+          hasSession: !loggedOut,
+          state: loggedOut
+            ? "LOGGED_OUT"
+            : "DISCONNECTED",
+          qr: null,
+        }
+      );
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Incoming messages
-   * -------------------------------------------------------
+   * Incoming messages.
+   *
+   * Auto responder, lead detection and
+   * message dispatcher remain untouched.
    */
-
   client.on(
     "message",
     async (msg) => {
@@ -529,10 +523,6 @@ async function initializeClient(userId) {
         if (!msg?.body) {
           return;
         }
-
-        logger.debug(
-          `[WA:${userId}] Incoming message from ${msg.from}`
-        );
 
         await handleIncomingMessage({
           userId,
@@ -547,22 +537,18 @@ async function initializeClient(userId) {
     }
   );
 
-
   /*
-   * -------------------------------------------------------
-   * Initialize
-   * -------------------------------------------------------
+   * Initialize.
    */
-
   try {
     logger.info(
-      `[WA:${userId}] Initializing WhatsApp client`
+      `[WA:${userId}] Initializing WhatsApp`
     );
 
     await client.initialize();
 
     logger.info(
-      `[WA:${userId}] Client initialization completed`
+      `[WA:${userId}] Initialization completed`
     );
 
     return client;
@@ -570,14 +556,17 @@ async function initializeClient(userId) {
     clients.delete(key);
     readyClients.delete(key);
 
-    await updateSession(userId, {
-      connected: false,
-      state: "INITIALIZATION_ERROR",
-      lastError: error.message,
-    });
+    await updateSessionStatus(
+      userId,
+      {
+        connected: false,
+        state: "INITIALIZATION_ERROR",
+        lastError: error.message,
+      }
+    );
 
     logger.error(
-      `[WA:${userId}] Client initialization failed: ${error.message}`
+      `[WA:${userId}] Initialization failed: ${error.message}`
     );
 
     try {
@@ -588,16 +577,15 @@ async function initializeClient(userId) {
   }
 }
 
-
 /*
- * ---------------------------------------------------------
- * Wait for ready
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Wait until actual READY
+|--------------------------------------------------------------------------
+*/
 
 export async function waitForClientReady(
   userId,
-  timeout = 15_000
+  timeout = 30_000
 ) {
   const key = String(userId);
 
@@ -605,10 +593,6 @@ export async function waitForClientReady(
     return true;
   }
 
-  /*
-   * If there isn't even a client, don't sit around for
-   * 60 seconds pretending something is happening.
-   */
   if (!clients.has(key)) {
     throw new Error(
       `WhatsApp client is not initialized for user ${userId}`
@@ -625,8 +609,9 @@ export async function waitForClientReady(
       return true;
     }
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 500)
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 500)
     );
   }
 
@@ -635,34 +620,36 @@ export async function waitForClientReady(
   );
 }
 
-
 /*
- * ---------------------------------------------------------
- * Explicit logout / destroy
- * ---------------------------------------------------------
- */
+|--------------------------------------------------------------------------
+| Explicit logout
+|--------------------------------------------------------------------------
+*/
 
 export async function destroyClient(
   userId,
   logout = false
 ) {
   const key = String(userId);
+
   const client = clients.get(key);
 
+  readyClients.delete(key);
+  clients.delete(key);
+  initializingClients.delete(key);
+
   if (!client) {
-    /*
-     * Even if the in-memory client disappeared after a
-     * crash, explicit logout should clear the persisted
-     * application state.
-     */
     if (logout) {
-      await updateSession(userId, {
-        connected: false,
-        requiresQR: true,
-        hasSession: false,
-        state: "LOGGED_OUT",
-        qr: null,
-      });
+      await updateSessionStatus(
+        userId,
+        {
+          connected: false,
+          requiresQR: true,
+          hasSession: false,
+          state: "LOGGED_OUT",
+          qr: null,
+        }
+      );
     }
 
     return;
@@ -671,7 +658,7 @@ export async function destroyClient(
   try {
     if (logout) {
       logger.info(
-        `[WA:${userId}] Explicit WhatsApp logout`
+        `[WA:${userId}] Explicit logout`
       );
 
       await client.logout();
@@ -682,64 +669,106 @@ export async function destroyClient(
     logger.error(
       `[WA:${userId}] Destroy error: ${error.message}`
     );
-  } finally {
-    clients.delete(key);
-    readyClients.delete(key);
-    initializingClients.delete(key);
   }
 
   if (logout) {
-    await updateSession(userId, {
-      connected: false,
-      requiresQR: true,
-      hasSession: false,
-      state: "LOGGED_OUT",
-      qr: null,
-    });
+    await updateSessionStatus(
+      userId,
+      {
+        connected: false,
+        requiresQR: true,
+        hasSession: false,
+        state: "LOGGED_OUT",
+        qr: null,
+      }
+    );
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| Discover persisted sessions
+|--------------------------------------------------------------------------
+|
+| DEVELOPMENT:
+|   Read ./wwebjs_auth/session-<userId>
+|
+| PRODUCTION:
+|   Ask Supabase store for persisted sessions.
+|
+| MongoDB is NOT queried.
+|--------------------------------------------------------------------------
+*/
+
+async function getPersistedUserIds() {
+  if (!IS_PRODUCTION) {
+    try {
+      const entries =
+        await fs.readdir(
+          path.resolve(AUTH_PATH),
+          {
+            withFileTypes: true,
+          }
+        );
+
+      return entries
+        .filter(
+          (entry) =>
+            entry.isDirectory() &&
+            entry.name.startsWith(
+              "session-"
+            )
+        )
+        .map(
+          (entry) =>
+            entry.name.replace(
+              /^session-/,
+              ""
+            )
+        )
+        .filter(Boolean);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  return supabaseWhatsAppStore.listSessions();
+}
 
 /*
- * ---------------------------------------------------------
- * Restore all known WhatsApp accounts
- * ---------------------------------------------------------
- *
- * IMPORTANT:
- *
- * Do NOT query connected:true.
- *
- * connected is runtime state and becomes false during
- * shutdowns/restarts.
- *
- * hasSession means the user has previously linked WhatsApp.
- */
+|--------------------------------------------------------------------------
+| Restore all persisted WhatsApp sessions
+|--------------------------------------------------------------------------
+*/
+
 export async function initAllWhatsAppUsers() {
-  const sessions =
-    await WhatsAppSession.find({
-      hasSession: true,
-    }).select("userId");
+  const userIds =
+    await getPersistedUserIds();
 
   logger.info(
-    `[WA] Restoring ${sessions.length} WhatsApp sessions`
+    `[WA] Found ${userIds.length} persisted WhatsApp session(s)`
   );
 
-  /*
-   * Initialize sequentially to avoid launching many
-   * Chromium processes simultaneously.
-   */
-  for (const session of sessions) {
+  for (const userId of userIds) {
     try {
-      await initWhatsAppUser(
-        session.userId
-      );
+      /*
+       * Start restoration.
+       *
+       * We deliberately do not require MongoDB
+       * to say "connected".
+       */
+      await initWhatsAppUser(userId);
 
       logger.info(
-        `[WA:${session.userId}] Restore initiated`
+        `[WA:${userId}] Restoration initiated`
       );
     } catch (error) {
       logger.error(
-        `[WA:${session.userId}] Restore failed: ${error.message}`
+        `[WA:${userId}] Restoration failed: ${error.message}`
       );
     }
   }
