@@ -1,0 +1,21 @@
+{
+	"name": "whatsapp-worker",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"vitest": "~3.2.0",
+		"wrangler": "^4.58.0"
+	},
+	"dependencies": {
+		"crypto": "^1.0.1",
+		"dotenv": "^17.2.3",
+		"os": "^0.1.2"
+	}
+}
