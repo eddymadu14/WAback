@@ -1,42 +1,159 @@
+
 import { limiter } from "./messageQueue.js";
-import { getClient, waitForClientReady } from "./whatsapp.manager.js";
+import {
+  getClient,
+  waitForClientReady,
+  isWhatsAppReady,
+} from "./whatsapp.manager.js";
 import { logger } from "../utils/logger.js";
 
+
+function normalizeRecipient(to) {
+  if (!to) {
+    throw new Error("Recipient is required");
+  }
+
+  return String(to).trim();
+}
+
+
 /**
- * Send a single message
+ * Send one WhatsApp message.
  */
-export async function sendMessage(userId, to, message) {
+export async function sendMessage(
+  userId,
+  to,
+  message
+) {
+  const recipient =
+    normalizeRecipient(to);
+
+  if (!message) {
+    throw new Error("Message is required");
+  }
+
+  if (!isWhatsAppReady(userId)) {
+    throw new Error(
+      `WhatsApp is not ready for user ${userId}`
+    );
+  }
+
+  const client =
+    getClient(userId);
+
+  if (!client) {
+    throw new Error(
+      `WhatsApp client unavailable for user ${userId}`
+    );
+  }
+
   try {
-    await waitForClientReady(userId);
+    await waitForClientReady(
+      userId,
+      5_000
+    );
 
-    const client = getClient(userId);
-    if (!client) throw new Error("WhatsApp client not connected");
+    await limiter.schedule(
+      () =>
+        client.sendMessage(
+          recipient,
+          message
+        )
+    );
 
-    await limiter.schedule(() => client.sendMessage(to, message));
+    logger.info(
+      `[WA:${userId}] Message sent to ${recipient}`
+    );
+  } catch (error) {
+    logger.error(
+      `[WA:${userId}] Failed to send message to ${recipient}: ${error.message}`
+    );
 
-    logger.info(`[WA:${userId}] Message sent to ${to}`);
-  } catch (err) {
-    logger.error(`[WA:${userId}] Failed to send message: ${err.message}`);
-    throw err;
+    throw error;
   }
 }
 
+
 /**
- * Send a broadcast to multiple recipients
+ * Send broadcast messages.
+ *
+ * Each recipient is processed independently.
+ *
+ * Returns a result instead of hiding failures.
  */
-export async function sendBroadcast(userId, recipients = [], message) {
-  try {
-    await waitForClientReady(userId);
-
-    const client = getClient(userId);
-    if (!client) throw new Error("WhatsApp client not connected");
-
-    for (const to of recipients) {
-      await limiter.schedule(() => client.sendMessage(to, message));
-      logger.info(`[WA:${userId}] Broadcast sent to ${to}`);
-    }
-  } catch (err) {
-    logger.error(`[WA:${userId}] Broadcast failed: ${err.message}`);
-    throw err;
+export async function sendBroadcast(
+  userId,
+  recipients = [],
+  message
+) {
+  if (!Array.isArray(recipients)) {
+    throw new Error(
+      "Recipients must be an array"
+    );
   }
+
+  if (!recipients.length) {
+    return {
+      sent: [],
+      failed: [],
+    };
+  }
+
+  if (!isWhatsAppReady(userId)) {
+    throw new Error(
+      `WhatsApp is not ready for user ${userId}`
+    );
+  }
+
+  const client =
+    getClient(userId);
+
+  if (!client) {
+    throw new Error(
+      `WhatsApp client unavailable for user ${userId}`
+    );
+  }
+
+  await waitForClientReady(
+    userId,
+    5_000
+  );
+
+  const sent = [];
+  const failed = [];
+
+  for (const recipient of recipients) {
+    try {
+      const normalized =
+        normalizeRecipient(recipient);
+
+      await limiter.schedule(
+        () =>
+          client.sendMessage(
+            normalized,
+            message
+          )
+      );
+
+      sent.push(normalized);
+
+      logger.info(
+        `[WA:${userId}] Broadcast sent to ${normalized}`
+      );
+    } catch (error) {
+      failed.push({
+        recipient,
+        error: error.message,
+      });
+
+      logger.error(
+        `[WA:${userId}] Broadcast failed for ${recipient}: ${error.message}`
+      );
+    }
+  }
+
+  return {
+    sent,
+    failed,
+  };
 }

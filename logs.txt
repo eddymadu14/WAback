@@ -4064,3 +4064,110 @@
 [INFO] [2026-08-30T03:26:58.443Z] [WA] Restoring 0 sessions
 [INFO] [2026-08-30T03:26:58.443Z] All connected WhatsApp clients restored
 [INFO] [2026-08-30T03:26:58.444Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:25:18.404Z] Message queue initialized
+[INFO] [2026-08-31T13:25:24.114Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:25:24.156Z] Backend running on port 5000
+[INFO] [2026-08-31T13:25:24.247Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:25:24.248Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:25:24.248Z] Broadcast scheduler started
+[ERROR] [2026-08-31T13:29:04.961Z] Error on POST /api/users/login -> Invalid credentials
+[INFO] [2026-08-31T13:30:50.796Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:30:50.801Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[INFO] [2026-08-31T13:31:05.956Z] Message queue initialized
+[INFO] [2026-08-31T13:31:08.569Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:31:08.586Z] Backend running on port 5000
+[INFO] [2026-08-31T13:31:08.678Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:31:08.679Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:31:08.679Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:39:54.969Z] Message queue initialized
+[INFO] [2026-08-31T13:39:56.841Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:39:56.858Z] Backend running on port 5000
+[INFO] [2026-08-31T13:39:56.888Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:39:56.889Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:39:56.890Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:40:45.678Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:40:45.683Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[ERROR] [2026-08-31T13:41:02.802Z] [WA:695932168a9879344ba3c854] Client initialization failed: net::ERR_NAME_NOT_RESOLVED at https://web.whatsapp.com/
+[INFO] [2026-08-31T13:41:06.263Z] Message queue initialized
+[INFO] [2026-08-31T13:41:09.571Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:41:09.594Z] Backend running on port 5000
+[INFO] [2026-08-31T13:41:09.658Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:41:09.659Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:41:09.658Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:42:09.838Z] Message queue initialized
+[INFO] [2026-08-31T13:42:11.805Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:42:11.825Z] Backend running on port 5000
+[INFO] [2026-08-31T13:42:11.870Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:42:11.871Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:42:11.871Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:42:33.541Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:42:33.543Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[ERROR] [2026-08-31T13:42:38.398Z] [WA:695932168a9879344ba3c854] Client initialization failed: net::ERR_NAME_NOT_RESOLVED at https://web.whatsapp.com/
+[INFO] [2026-08-31T13:49:23.670Z] Message queue initialized
+[INFO] [2026-08-31T13:49:25.392Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:49:25.411Z] Backend running on port 5000
+[INFO] [2026-08-31T13:49:25.469Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:49:25.469Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:49:25.470Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:50:01.176Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:50:01.181Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[INFO] [2026-08-31T13:50:10.856Z] [WA:695932168a9879344ba3c854] QR generated
+[INFO] [2026-08-31T13:50:10.958Z] [WA:695932168a9879344ba3c854] WhatsApp client initialization completed
+[INFO] [2026-08-31T13:51:00.846Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[INFO] [2026-08-31T13:51:00.867Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[INFO] [2026-08-31T13:51:00.921Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[ERROR] [2026-08-31T13:52:00.532Z] Broadcast error:
+[INFO] [2026-08-31T13:52:19.162Z] Message queue initialized
+[INFO] [2026-08-31T13:52:21.883Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:52:21.905Z] Backend running on port 5000
+[INFO] [2026-08-31T13:52:21.942Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:52:21.943Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:52:21.944Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:52:48.739Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:52:48.753Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[INFO] [2026-08-31T13:53:30.135Z] [WA:695932168a9879344ba3c854] WhatsApp client initialization completed
+[ERROR] [2026-08-31T13:53:32.853Z] Broadcast error:
+[INFO] [2026-08-31T13:53:41.862Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[INFO] [2026-08-31T13:54:40.981Z] Message queue initialized
+[INFO] [2026-08-31T13:54:43.409Z] MongoDB connected successfully
+[INFO] [2026-08-31T13:54:43.425Z] Backend running on port 5000
+[INFO] [2026-08-31T13:54:43.569Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T13:54:43.570Z] Broadcast scheduler started
+[INFO] [2026-08-31T13:54:43.569Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T13:54:56.664Z] [WA:695932168a9879344ba3c854] Creating WhatsApp client
+[INFO] [2026-08-31T13:54:56.666Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[INFO] [2026-08-31T13:55:12.236Z] [WA:695932168a9879344ba3c854] WhatsApp client initialization completed
+[INFO] [2026-08-31T13:55:19.017Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[ERROR] [2026-08-31T13:55:28.958Z] Broadcast error:
+[INFO] [2026-08-31T14:05:07.940Z] Message queue initialized
+[INFO] [2026-08-31T14:05:11.938Z] MongoDB connected successfully
+[INFO] [2026-08-31T14:05:11.960Z] Backend running on port 5000
+[INFO] [2026-08-31T14:05:11.994Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T14:05:11.994Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T14:05:11.995Z] Broadcast scheduler started
+[INFO] [2026-08-31T14:05:50.373Z] Message queue initialized
+[INFO] [2026-08-31T14:05:53.851Z] MongoDB connected successfully
+[INFO] [2026-08-31T14:05:53.891Z] Backend running on port 5000
+[INFO] [2026-08-31T14:05:53.967Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T14:05:53.968Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T14:05:53.980Z] Broadcast scheduler started
+[INFO] [2026-08-31T14:21:27.230Z] Message queue initialized
+[INFO] [2026-08-31T14:21:30.925Z] MongoDB connected successfully
+[INFO] [2026-08-31T14:21:30.981Z] Backend running on port 5000
+[INFO] [2026-08-31T14:21:31.112Z] [WA] Restoring 0 sessions
+[INFO] [2026-08-31T14:21:31.131Z] All connected WhatsApp clients restored
+[INFO] [2026-08-31T14:21:31.134Z] Broadcast scheduler started
+[INFO] [2026-08-31T14:49:20.591Z] Message queue initialized
+[INFO] [2026-08-31T14:49:21.928Z] MongoDB connected successfully
+[INFO] [2026-08-31T14:49:21.949Z] Backend running on port 5000
+[INFO] [2026-08-31T14:49:22.026Z] [WA] Restoring 0 WhatsApp sessions
+[INFO] [2026-08-31T14:49:22.027Z] WhatsApp session restoration completed
+[INFO] [2026-08-31T14:49:22.028Z] [BROADCAST] Scheduler started (30000ms interval)
+[INFO] [2026-08-31T14:49:22.031Z] Broadcast scheduler started
+[INFO] [2026-08-31T14:49:46.375Z] [WA:695932168a9879344ba3c854] Using LocalAuth
+[INFO] [2026-08-31T14:49:46.381Z] [WA:695932168a9879344ba3c854] Initializing WhatsApp client
+[INFO] [2026-08-31T14:50:12.190Z] [WA:695932168a9879344ba3c854] Client initialization completed
+[ERROR] [2026-08-31T14:50:24.533Z] Broadcast error:
+[INFO] [2026-08-31T14:50:25.570Z] [WA:695932168a9879344ba3c854] WhatsApp authenticated
+[ERROR] [2026-08-31T14:50:40.934Z] Broadcast error:
+[ERROR] [2026-08-31T14:52:00.771Z] Broadcast error:
